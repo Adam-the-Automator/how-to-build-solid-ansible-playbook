@@ -1,0 +1,88 @@
+##################################################
+# LEMP Stack on Ubuntu 18.04
+##################################################
+---
+- hosts: LEMP1804
+  become: true
+  vars_files:
+    - vars/default.yml
+
+  tasks:
+
+# Install Software Packages
+# Task #1
+    - name: Install LEMP Packages
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'nginx', 'mysql-server', 'python3-pymysql', 'php-fpm', 'php-mysql' ]
+
+
+# Define the Nginx Configuration
+# Task #2
+    - name: Setting the NGINX conf file
+      template:
+        src: "files/nginx.conf.j2"
+        dest: "/etc/nginx/sites-available/{{ http_conf }}"
+
+# Task #3
+    - name: Enabling new site
+      file:
+        src: "/etc/nginx/sites-available/{{ http_conf }}"
+        dest: "/etc/nginx/sites-enabled/{{ http_conf }}"
+        state: link
+      notify: Reload Nginx
+
+# Task #4
+    - name: Removing "default" site
+      file:
+        path: "/etc/nginx/sites-enabled/default"
+        state: absent
+      notify: Reload Nginx
+
+
+# Define the MySQL Configuration
+# Task #5
+    - name: Settting the root password 
+      mysql_user: 
+        name: root 
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        
+        
+# Task #6
+    - name: Removing all anonymous user accounts
+      mysql_user:
+        name: ''
+        host_all: yes
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+# Task #7
+    - name: Removing the MySQL test database
+      mysql_db: 
+        name: test 
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+# Define the Ubuntu Firewall (UFW) Configuration
+# Task #8
+    - name: "UFW - Allow HTTP on port {{ http_port }}"
+      ufw:
+        rule: allow
+        port: "{{ http_port }}"
+        proto: tcp
+
+# Configuring the PHP Info Page
+# Task #9
+    - name: Configuring the PHP Info Page
+      template:
+        src: "files/info.php.j2"
+        dest: "/var/www/html/info.php"
+
+# HANDLERS - Reload and Restart Nginx
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
